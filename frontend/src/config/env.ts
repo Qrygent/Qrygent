@@ -16,6 +16,18 @@ const httpUrlSchema = z
   })
   .transform((val) => val.replace(/\/+$/, ''));
 
+const pqcServiceUrlSchema = z
+  .string()
+  .trim()
+  .refine(
+    (val) =>
+      val === '/' ||
+      ((val.startsWith('http://') || val.startsWith('https://')) &&
+        z.string().url().safeParse(val).success),
+    { message: 'Must be "/" (same-origin Vercel) or a valid http(s) URL' },
+  )
+  .transform((val) => (val === '/' ? '' : val.replace(/\/+$/, '')));
+
 const positiveIntSchema = z
   .string()
   .trim()
@@ -107,7 +119,11 @@ function parseOptionalField<T>(
       requiredFor: meta.requiredFor,
       owner: meta.owner,
       status: 'configured',
-      valuePreview: meta.maskValue ? `${str.slice(0, 4)}…${str.slice(-4)}` : str,
+      valuePreview: meta.maskValue
+        ? `${str.slice(0, 4)}…${str.slice(-4)}`
+        : str === '/'
+          ? 'Same-origin (/v1)'
+          : str,
     },
   };
 }
@@ -151,7 +167,7 @@ export function validateEnv(rawEnv: RawEnvMap): QrygentEnvConfig {
 
   const pqcServiceBaseUrl = parseOptionalField(
     rawEnv.VITE_PQC_SERVICE_BASE_URL,
-    httpUrlSchema,
+    pqcServiceUrlSchema,
     {
       key: 'VITE_PQC_SERVICE_BASE_URL',
       label: 'PQC Verifier Service URL',

@@ -171,8 +171,8 @@ export function PaymentsPage() {
         description="Submit real ML-DSA-65 signed payment envelopes to the PQC verification service, inspect returned EIP-712 attestations, and audit on-chain settlement history."
         actions={
           <ZoneBadge tone={envConfig.capabilities.hasPqcVerifierConfig ? 'pqc' : 'warning'}>
-            {envConfig.pqcServiceBaseUrl
-              ? `POST ${envConfig.pqcServiceBaseUrl}/v1/payments/verify`
+            {envConfig.capabilities.hasPqcVerifierConfig
+              ? `POST ${envConfig.pqcServiceBaseUrl ?? ''}/v1/payments/verify`
               : 'Verifier URL Unset'}
           </ZoneBadge>
         }

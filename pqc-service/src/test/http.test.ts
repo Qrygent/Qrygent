@@ -155,4 +155,41 @@ describe('PQC HTTP API end-to-end integration', () => {
       });
     }
   });
+
+  it('normalizes Vercel /api/v1?route=... rewrites and fails closed when persistent storage is required but unconfigured', async () => {
+    const store = new RegistryStore(null);
+    const verifier = new PaymentVerifierService(store, null);
+    const serverlessSim = createPqcHttpServer(verifier, {
+      corsOrigin: '*',
+      requirePersistentStorage: true,
+    });
+
+    await new Promise<void>((resolve) => {
+      serverlessSim.listen(0, '127.0.0.1', () => resolve());
+    });
+    const addr = serverlessSim.address() as AddressInfo;
+    const base = `http://127.0.0.1:${addr.port}`;
+
+    try {
+      const healthRes = await fetch(`${base}/api/v1?route=health`);
+      expect(healthRes.status).toBe(200);
+      const healthBody = (await healthRes.json()) as {
+        status: string;
+        storageMode: string;
+        storageReady: boolean;
+      };
+      expect(healthBody.status).toBe('degraded');
+      expect(healthBody.storageMode).toBe('unconfigured_serverless');
+      expect(healthBody.storageReady).toBe(false);
+
+      const agentsRes = await fetch(`${base}/api/v1?route=agents`);
+      expect(agentsRes.status).toBe(503);
+      const agentsBody = (await agentsRes.json()) as { code: string };
+      expect(agentsBody.code).toBe('VERIFIER_UNAVAILABLE');
+    } finally {
+      await new Promise<void>((resolve, reject) => {
+        serverlessSim.close((err) => (err ? reject(err) : resolve()));
+      });
+    }
+  });
 });

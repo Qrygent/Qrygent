@@ -10,14 +10,14 @@ export function buildTargetChain(config: QrygentEnvConfig = envConfig): Chain | 
     return null;
   }
 
+  const isQdayAevum = config.chainId === 44005;
+
   return defineChain({
     id: config.chainId,
-    name: `Configured Testnet (${config.chainId})`,
-    nativeCurrency: {
-      name: 'Testnet Gas Token',
-      symbol: 'ETH',
-      decimals: 18,
-    },
+    name: isQdayAevum ? 'QDay Aevum Testnet' : `Configured Testnet (${config.chainId})`,
+    nativeCurrency: isQdayAevum
+      ? { name: 'QDay Testnet Gas', symbol: 'tQDAY', decimals: 18 }
+      : { name: 'Testnet Gas Token', symbol: 'ETH', decimals: 18 },
     rpcUrls: {
       default: {
         http: [config.rpcUrl],
@@ -27,7 +27,7 @@ export function buildTargetChain(config: QrygentEnvConfig = envConfig): Chain | 
       ? {
           blockExplorers: {
             default: {
-              name: 'Testnet Explorer',
+              name: isQdayAevum ? 'QDay Aevum Explorer' : 'Testnet Explorer',
               url: config.explorerUrl,
             },
           },

@@ -137,20 +137,29 @@ export class PqcVerifierClient {
     return this.baseUrl;
   }
 
+  private isConfigured(): boolean {
+    return this.baseUrl !== null;
+  }
+
+  private endpoint(path: string): string {
+    return `${this.baseUrl ?? ''}${path}`;
+  }
+
   async checkHealth(): Promise<VerifierHealthStatus> {
     const checkedAt = new Date().toISOString();
-    if (!this.baseUrl) {
+    if (!this.isConfigured()) {
       return {
         reachable: false,
         status: 'unconfigured',
         checkedAt,
-        message: 'Set VITE_PQC_SERVICE_BASE_URL in your local .env file to monitor verifier health.',
+        message:
+          'Set VITE_PQC_SERVICE_BASE_URL (use "/" for same-origin Vercel or http://127.0.0.1:8000 locally) to monitor verifier health.',
       };
     }
 
     const start = performance.now();
     try {
-      const response = await fetchWithTimeout(`${this.baseUrl}/v1/health`, {
+      const response = await fetchWithTimeout(this.endpoint('/v1/health'), {
         method: 'GET',
         headers: { Accept: 'application/json' },
       });
@@ -198,7 +207,7 @@ export class PqcVerifierClient {
   async verifyPaymentRequest(
     envelope: PaymentVerificationEnvelope,
   ): Promise<ServiceResult<VerificationResponse>> {
-    if (!this.baseUrl) {
+    if (!this.isConfigured()) {
       return {
         status: 'unconfigured',
         reason: 'PQC verifier base URL is not configured.',
@@ -217,7 +226,7 @@ export class PqcVerifierClient {
     }
 
     try {
-      const response = await fetchWithTimeout(`${this.baseUrl}/v1/payments/verify`, {
+      const response = await fetchWithTimeout(this.endpoint('/v1/payments/verify'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -263,7 +272,7 @@ export class PqcVerifierClient {
   }
 
   async listAgents(): Promise<ServiceResult<AgentRecord[]>> {
-    if (!this.baseUrl) {
+    if (!this.isConfigured()) {
       return {
         status: 'unconfigured',
         reason: 'Set VITE_PQC_SERVICE_BASE_URL to load registered ML-DSA-65 agent identities.',
@@ -273,7 +282,7 @@ export class PqcVerifierClient {
     }
 
     try {
-      const response = await fetchWithTimeout(`${this.baseUrl}/v1/agents`, {
+      const response = await fetchWithTimeout(this.endpoint('/v1/agents'), {
         method: 'GET',
         headers: { Accept: 'application/json' },
       });
@@ -296,13 +305,13 @@ export class PqcVerifierClient {
       return {
         status: 'error',
         code: 'VERIFIER_UNAVAILABLE',
-        message: `Unable to reach ${this.baseUrl}/v1/agents. Start pqc-service to inspect registered agents.`,
+        message: `Unable to reach ${this.endpoint('/v1/agents')}. Start pqc-service to inspect registered agents.`,
       };
     }
   }
 
   async registerAgentKey(input: RegisterAgentKeyInput): Promise<ServiceResult<AgentRecord>> {
-    if (!this.baseUrl) {
+    if (!this.isConfigured()) {
       return {
         status: 'unconfigured',
         reason: 'PQC verifier base URL is not configured.',
@@ -312,7 +321,7 @@ export class PqcVerifierClient {
     }
 
     try {
-      const response = await fetchWithTimeout(`${this.baseUrl}/v1/agents/register`, {
+      const response = await fetchWithTimeout(this.endpoint('/v1/agents/register'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
         body: JSON.stringify(input),
@@ -335,13 +344,13 @@ export class PqcVerifierClient {
       return {
         status: 'error',
         code: 'VERIFIER_UNAVAILABLE',
-        message: `Unable to reach ${this.baseUrl}/v1/agents/register.`,
+        message: `Unable to reach ${this.endpoint('/v1/agents/register')}.`,
       };
     }
   }
 
   async rotateAgentKey(input: RotateAgentKeyInput): Promise<ServiceResult<AgentRecord>> {
-    if (!this.baseUrl) {
+    if (!this.isConfigured()) {
       return {
         status: 'unconfigured',
         reason: 'PQC verifier base URL is not configured.',
@@ -352,7 +361,7 @@ export class PqcVerifierClient {
 
     try {
       const response = await fetchWithTimeout(
-        `${this.baseUrl}/v1/agents/${input.agentId.toLowerCase()}/rotate`,
+        this.endpoint(`/v1/agents/${input.agentId.toLowerCase()}/rotate`),
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
@@ -383,13 +392,13 @@ export class PqcVerifierClient {
       return {
         status: 'error',
         code: 'VERIFIER_UNAVAILABLE',
-        message: `Unable to reach ${this.baseUrl}/v1/agents/${input.agentId}/rotate.`,
+        message: `Unable to reach ${this.endpoint(`/v1/agents/${input.agentId}/rotate`)}.`,
       };
     }
   }
 
   async revokeAgentKey(input: RevokeAgentKeyInput): Promise<ServiceResult<AgentRecord>> {
-    if (!this.baseUrl) {
+    if (!this.isConfigured()) {
       return {
         status: 'unconfigured',
         reason: 'PQC verifier base URL is not configured.',
@@ -400,7 +409,7 @@ export class PqcVerifierClient {
 
     try {
       const response = await fetchWithTimeout(
-        `${this.baseUrl}/v1/agents/${input.agentId.toLowerCase()}/revoke`,
+        this.endpoint(`/v1/agents/${input.agentId.toLowerCase()}/revoke`),
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
@@ -431,13 +440,13 @@ export class PqcVerifierClient {
       return {
         status: 'error',
         code: 'VERIFIER_UNAVAILABLE',
-        message: `Unable to reach ${this.baseUrl}/v1/agents/${input.agentId}/revoke.`,
+        message: `Unable to reach ${this.endpoint(`/v1/agents/${input.agentId}/revoke`)}.`,
       };
     }
   }
 
   async listSecurityEvents(): Promise<ServiceResult<SecurityEvent[]>> {
-    if (!this.baseUrl) {
+    if (!this.isConfigured()) {
       return {
         status: 'unconfigured',
         reason: 'Set VITE_PQC_SERVICE_BASE_URL to stream off-chain PQC security events.',
@@ -447,7 +456,7 @@ export class PqcVerifierClient {
     }
 
     try {
-      const response = await fetchWithTimeout(`${this.baseUrl}/v1/security/events`, {
+      const response = await fetchWithTimeout(this.endpoint('/v1/security/events'), {
         method: 'GET',
         headers: { Accept: 'application/json' },
       });
@@ -467,13 +476,13 @@ export class PqcVerifierClient {
       return {
         status: 'error',
         code: 'VERIFIER_UNAVAILABLE',
-        message: `Unable to reach ${this.baseUrl}/v1/security/events. Start pqc-service to stream live verification rejections.`,
+        message: `Unable to reach ${this.endpoint('/v1/security/events')}. Start pqc-service to stream live verification rejections.`,
       };
     }
   }
 
   async fetchBenchmarks(): Promise<ServiceResult<BenchmarkDataset>> {
-    if (!this.baseUrl) {
+    if (!this.isConfigured()) {
       return {
         status: 'unconfigured',
         reason:
@@ -484,7 +493,7 @@ export class PqcVerifierClient {
     }
 
     try {
-      const response = await fetchWithTimeout(`${this.baseUrl}/v1/benchmarks`, {
+      const response = await fetchWithTimeout(this.endpoint('/v1/benchmarks'), {
         method: 'GET',
         headers: { Accept: 'application/json' },
       });
@@ -512,7 +521,7 @@ export class PqcVerifierClient {
       return {
         status: 'error',
         code: 'VERIFIER_UNAVAILABLE',
-        message: `Unable to reach ${this.baseUrl}/v1/benchmarks. Start pqc-service or upload pqc-service/benchmarks/latest.json locally.`,
+        message: `Unable to reach ${this.endpoint('/v1/benchmarks')}. Start pqc-service or upload pqc-service/benchmarks/latest.json locally.`,
       };
     }
   }

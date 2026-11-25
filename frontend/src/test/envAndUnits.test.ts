@@ -55,6 +55,18 @@ describe('Startup environment validation', () => {
     expect(cfg.capabilities.hasVaultConfig).toBe(true);
     expect(cfg.capabilities.hasPqcVerifierConfig).toBe(true);
   });
+
+  it('accepts "/" for same-origin Vercel PQC API routing', () => {
+    const cfg = validateEnv({
+      VITE_PQC_SERVICE_BASE_URL: '/',
+    });
+    expect(cfg.hasErrors).toBe(false);
+    expect(cfg.pqcServiceBaseUrl).toBe('');
+    expect(cfg.capabilities.hasPqcVerifierConfig).toBe(true);
+    expect(cfg.diagnostics.find((d) => d.key === 'VITE_PQC_SERVICE_BASE_URL')?.valuePreview).toBe(
+      'Same-origin (/v1)',
+    );
+  });
 });
 
 describe('Base-unit integer financial formatting', () => {

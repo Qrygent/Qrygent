@@ -5,7 +5,8 @@ import { getAddress, isAddress, type Address, type Hex } from 'viem';
 import { Eip712AttestationSigner } from './crypto/eip712.js';
 import { createPqcHttpServer } from './server.js';
 import { PaymentVerifierService } from './service/verifier.js';
-import { RegistryStore } from './store/registry.js';
+import { RegistryStore, type IRegistryStore } from './store/registry.js';
+import { UpstashRedisRegistryStore } from './store/upstashStore.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const serviceRoot = resolve(__dirname, '..');
@@ -53,7 +54,13 @@ if (process.env.EXPECTED_VAULT_ADDRESS?.trim()) {
   expectedVaultAddress = getAddress(process.env.EXPECTED_VAULT_ADDRESS.trim());
 }
 
-const store = new RegistryStore(storePath);
+const upstashUrl = process.env.UPSTASH_REDIS_REST_URL?.trim();
+const upstashToken = process.env.UPSTASH_REDIS_REST_TOKEN?.trim();
+const store: IRegistryStore =
+  upstashUrl && upstashToken
+    ? new UpstashRedisRegistryStore(upstashUrl, upstashToken)
+    : new RegistryStore(storePath);
+
 const verifier = new PaymentVerifierService(store, attestationSigner, {
   expectedChainId: process.env.EXPECTED_CHAIN_ID?.trim() || null,
   expectedVaultAddress,
@@ -63,6 +70,6 @@ const server = createPqcHttpServer(verifier, { corsOrigin, benchmarksPath });
 
 server.listen(port, host, () => {
   console.log(
-    `[qrygent-pqc-service] Listening on http://${host}:${port} (CORS: ${corsOrigin}, attestationSignerReady: ${Boolean(attestationSigner)})`,
+    `[qrygent-pqc-service] Listening on http://${host}:${port} (storage: ${store.storageMode}, CORS: ${corsOrigin}, attestationSignerReady: ${Boolean(attestationSigner)})`,
   );
 });

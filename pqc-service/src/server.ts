@@ -18,7 +18,11 @@ export interface HttpServerOptions {
   /** Sliding-window rate limit for POST mutation/verification endpoints (default: 60 req / 60s per IP) */
   rateLimitMaxRequests?: number;
   rateLimitWindowMs?: number;
+  /** When true on Vercel serverless without persistent Upstash Redis, stateful endpoints fail closed (HTTP 503). */
+  requirePersistentStorage?: boolean;
 }
+
+type MaybePreParsedRequest = IncomingMessage & { body?: unknown };
 
 class SlidingWindowRateLimiter {
   private readonly hits = new Map<string, number[]>();
@@ -62,7 +66,39 @@ function sendJson(
   res.end(body);
 }
 
-async function readJsonBody(req: IncomingMessage): Promise<unknown> {
+async function readJsonBody(req: MaybePreParsedRequest): Promise<unknown> {
+  // Support Vercel Serverless Functions where req.body may already be parsed
+  if (req.body !== undefined) {
+    if (typeof req.body === 'string') {
+      if (Buffer.byteLength(req.body, 'utf8') > MAX_BODY_BYTES) {
+        throw new Error('PAYLOAD_TOO_LARGE');
+      }
+      if (!req.body.trim()) throw new Error('EMPTY_BODY');
+      try {
+        return JSON.parse(req.body);
+      } catch {
+        throw new Error('INVALID_JSON');
+      }
+    }
+    if (Buffer.isBuffer(req.body)) {
+      if (req.body.length > MAX_BODY_BYTES) throw new Error('PAYLOAD_TOO_LARGE');
+      const raw = req.body.toString('utf8');
+      if (!raw.trim()) throw new Error('EMPTY_BODY');
+      try {
+        return JSON.parse(raw);
+      } catch {
+        throw new Error('INVALID_JSON');
+      }
+    }
+    if (typeof req.body === 'object' && req.body !== null) {
+      const serialized = JSON.stringify(req.body);
+      if (Buffer.byteLength(serialized, 'utf8') > MAX_BODY_BYTES) {
+        throw new Error('PAYLOAD_TOO_LARGE');
+      }
+      return req.body;
+    }
+  }
+
   const chunks: Buffer[] = [];
   let total = 0;
 
@@ -87,7 +123,26 @@ async function readJsonBody(req: IncomingMessage): Promise<unknown> {
   }
 }
 
-export function createPqcHttpServer(
+/**
+ * Normalizes both direct `/v1/...` paths and Vercel rewritten `/api/v1?route=...` paths.
+ */
+export function resolveNormalizedV1Path(rawUrl: string | undefined): {
+  path: string;
+  searchParams: URLSearchParams;
+} {
+  const url = new URL(rawUrl ?? '/', 'http://localhost');
+  const routeParam = url.searchParams.get('route');
+  if (routeParam !== null) {
+    const cleaned = routeParam.replace(/^\/+/, '');
+    return { path: `/v1/${cleaned}`, searchParams: url.searchParams };
+  }
+  if (url.pathname.startsWith('/api/v1/')) {
+    return { path: url.pathname.replace(/^\/api/, ''), searchParams: url.searchParams };
+  }
+  return { path: url.pathname, searchParams: url.searchParams };
+}
+
+export function createPqcRequestHandler(
   verifier: PaymentVerifierService,
   options: HttpServerOptions,
 ) {
@@ -97,11 +152,13 @@ export function createPqcHttpServer(
     options.rateLimitMaxRequests ?? 60,
     options.rateLimitWindowMs ?? 60_000,
   );
+  const storageBlocked = Boolean(
+    options.requirePersistentStorage && verifier.store.storageMode === 'memory',
+  );
 
-  return createServer(async (req, res) => {
+  return async (req: MaybePreParsedRequest, res: ServerResponse) => {
     const method = req.method ?? 'GET';
-    const url = new URL(req.url ?? '/', 'http://localhost');
-    const path = url.pathname;
+    const { path, searchParams } = resolveNormalizedV1Path(req.url);
 
     if (method === 'OPTIONS') {
       res.writeHead(204, {
@@ -114,7 +171,11 @@ export function createPqcHttpServer(
     }
 
     if (method === 'POST') {
-      const clientIp = req.socket.remoteAddress ?? 'unknown';
+      const forwarded = req.headers['x-forwarded-for'];
+      const clientIp =
+        (Array.isArray(forwarded) ? forwarded[0] : forwarded?.split(',')[0]?.trim()) ??
+        req.socket?.remoteAddress ??
+        'unknown';
       const limit = rateLimiter.check(clientIp);
       if (!limit.allowed) {
         res.writeHead(429, {
@@ -141,16 +202,55 @@ export function createPqcHttpServer(
           res,
           200,
           {
-            status: 'ok',
+            status: storageBlocked ? 'degraded' : 'ok',
             service: 'qrygent-pqc-verifier',
             protocolVersion: SUPPORTED_PROTOCOL_VERSION,
             algorithm: ML_DSA_65_ALGORITHM,
             standard: ML_DSA_65_STANDARD,
             library: ML_DSA_65_LIBRARY,
+            storageMode: storageBlocked ? 'unconfigured_serverless' : verifier.store.storageMode,
+            storageReady: !storageBlocked,
             attestationSignerReady: Boolean(verifier.attestationSigner),
             verifierAddress: verifier.attestationSigner?.verifierAddress ?? null,
             expectedChainId: verifier.config.expectedChainId ?? null,
             expectedVaultAddress: verifier.config.expectedVaultAddress ?? null,
+          },
+          options.corsOrigin,
+        );
+        return;
+      }
+
+      // GET /v1/benchmarks (read-only static artifact; works even before Redis is provisioned)
+      if (method === 'GET' && path === '/v1/benchmarks') {
+        if (!existsSync(benchmarksPath)) {
+          sendJson(
+            res,
+            404,
+            {
+              status: 'unavailable',
+              code: 'BENCHMARKS_NOT_MEASURED',
+              message:
+                'No measured benchmark dataset has been generated yet. Run npm run bench in pqc-service.',
+            },
+            options.corsOrigin,
+          );
+          return;
+        }
+        const data = JSON.parse(readFileSync(benchmarksPath, 'utf8'));
+        sendJson(res, 200, data, options.corsOrigin);
+        return;
+      }
+
+      // Fail closed on stateful routes when running serverless without Upstash Redis
+      if (storageBlocked) {
+        sendJson(
+          res,
+          503,
+          {
+            status: 'rejected',
+            code: 'VERIFIER_UNAVAILABLE',
+            message:
+              'Persistent serverless storage is not configured. Attach Upstash Redis in Vercel (UPSTASH_REDIS_REST_URL & UPSTASH_REDIS_REST_TOKEN) to enable key registry, audit logs, and replay-safe verification.',
           },
           options.corsOrigin,
         );
@@ -171,7 +271,7 @@ export function createPqcHttpServer(
           res,
           200,
           {
-            agents: verifier.store.listAgents(),
+            agents: await verifier.store.listAgents(),
           },
           options.corsOrigin,
         );
@@ -206,31 +306,11 @@ export function createPqcHttpServer(
 
       // GET /v1/security/events
       if (method === 'GET' && path === '/v1/security/events') {
-        const limitParam = Number.parseInt(url.searchParams.get('limit') ?? '50', 10);
-        const events = verifier.store.listSecurityEvents(
+        const limitParam = Number.parseInt(searchParams.get('limit') ?? '50', 10);
+        const events = await verifier.store.listSecurityEvents(
           Number.isFinite(limitParam) ? limitParam : 50,
         );
         sendJson(res, 200, { events }, options.corsOrigin);
-        return;
-      }
-
-      // GET /v1/benchmarks
-      if (method === 'GET' && path === '/v1/benchmarks') {
-        if (!existsSync(benchmarksPath)) {
-          sendJson(
-            res,
-            404,
-            {
-              status: 'unavailable',
-              code: 'BENCHMARKS_NOT_MEASURED',
-              message: 'No measured benchmark dataset has been generated yet. Run npm run bench in pqc-service.',
-            },
-            options.corsOrigin,
-          );
-          return;
-        }
-        const data = JSON.parse(readFileSync(benchmarksPath, 'utf8'));
-        sendJson(res, 200, data, options.corsOrigin);
         return;
       }
 
@@ -246,7 +326,11 @@ export function createPqcHttpServer(
         sendJson(
           res,
           413,
-          { status: 'rejected', code: 'MALFORMED_REQUEST', message: 'Request body exceeds 64 KB limit.' },
+          {
+            status: 'rejected',
+            code: 'MALFORMED_REQUEST',
+            message: 'Request body exceeds 64 KB limit.',
+          },
           options.corsOrigin,
         );
         return;
@@ -255,7 +339,11 @@ export function createPqcHttpServer(
         sendJson(
           res,
           400,
-          { status: 'rejected', code: 'MALFORMED_REQUEST', message: 'Request body must be valid JSON.' },
+          {
+            status: 'rejected',
+            code: 'MALFORMED_REQUEST',
+            message: 'Request body must be valid JSON.',
+          },
           options.corsOrigin,
         );
         return;
@@ -271,5 +359,12 @@ export function createPqcHttpServer(
         options.corsOrigin,
       );
     }
-  });
+  };
+}
+
+export function createPqcHttpServer(
+  verifier: PaymentVerifierService,
+  options: HttpServerOptions,
+) {
+  return createServer(createPqcRequestHandler(verifier, options));
 }

@@ -117,7 +117,9 @@ export function SettingsPage() {
             <div className="py-2.5 flex justify-between gap-4">
               <dt className="text-[#5F5E56]">Configured Base URL</dt>
               <dd className="text-[#141412] break-all text-right">
-                {envConfig.pqcServiceBaseUrl ?? 'Unset'}
+                {envConfig.pqcServiceBaseUrl === ''
+                  ? 'Same-origin (/v1)'
+                  : envConfig.pqcServiceBaseUrl ?? 'Unset'}
               </dd>
             </div>
             <div className="py-2.5 flex justify-between gap-4">

@@ -160,7 +160,9 @@ export function AppShell({ children }: { children: ReactNode }) {
             )}
           </div>
           <div className="font-mono text-[10px] text-[#7D7B73] truncate">
-            {envConfig.pqcServiceBaseUrl ?? 'VITE_PQC_SERVICE_BASE_URL unset'}
+            {envConfig.pqcServiceBaseUrl === ''
+              ? 'Same-origin (/v1)'
+              : envConfig.pqcServiceBaseUrl ?? 'VITE_PQC_SERVICE_BASE_URL unset'}
           </div>
         </div>
 

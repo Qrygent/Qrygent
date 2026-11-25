@@ -1,0 +1,17 @@
+{
+  "name": "qrygent-monorepo",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "build": "npm --prefix frontend run build && npm --prefix pqc-service run build",
+    "test": "npm --prefix pqc-service run test && npm --prefix frontend run test",
+    "dev:frontend": "npm --prefix frontend run dev",
+    "dev:pqc": "npm --prefix pqc-service run dev"
+  },
+  "dependencies": {
+    "@noble/post-quantum": "^0.4.1",
+    "viem": "^2.23.4",
+    "zod": "^3.24.2"
+  }
+}
