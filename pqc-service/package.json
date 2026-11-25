@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "agent:cli": "tsx src/cli/agentSimulator.ts",
-    "bench": "tsx src/bench/runBenchmarks.ts"
+    "bench": "tsx src/bench/runBenchmarks.ts",
+    "vector:generate": "tsx src/bench/generateTestVector.ts"
   },
   "dependencies": {
     "@noble/post-quantum": "^0.4.1",

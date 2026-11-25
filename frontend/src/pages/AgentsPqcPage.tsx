@@ -1,11 +1,12 @@
 import { useState, type FormEvent } from 'react';
 import type { Hex } from 'viem';
-import { Ban, CheckCircle2, KeyRound, Lock, RefreshCw, ShieldAlert } from 'lucide-react';
+import { Ban, CheckCircle2, KeyRound, Lock, RefreshCw, RotateCw, ShieldAlert } from 'lucide-react';
 import { formatUtcTimestamp, truncateHex } from '../domain/units';
 import {
   useAgents,
   useRegisterAgentKey,
   useRevokeAgentKey,
+  useRotateAgentKey,
   useWalletNetwork,
 } from '../hooks/useQrygentData';
 import {
@@ -28,6 +29,7 @@ export function AgentsPqcPage() {
   const wallet = useWalletNetwork();
   const agentsQuery = useAgents();
   const registerMutation = useRegisterAgentKey();
+  const rotateMutation = useRotateAgentKey();
   const revokeMutation = useRevokeAgentKey();
 
   const [agentLabel, setAgentLabel] = useState('');
@@ -37,6 +39,9 @@ export function AgentsPqcPage() {
   const [formError, setFormError] = useState<string | null>(null);
   const [formSuccess, setFormSuccess] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [rotatingAgentId, setRotatingAgentId] = useState<string | null>(null);
+  const [rotateKeyId, setRotateKeyId] = useState('');
+  const [rotatePubKey, setRotatePubKey] = useState('');
 
   const handleRegister = async (e: FormEvent) => {
     e.preventDefault();
@@ -118,6 +123,66 @@ export function AgentsPqcPage() {
       setFormError(
         err instanceof Error ? err.message : 'Wallet signature or registration failed.',
       );
+    }
+  };
+
+  const handleRotateKey = async (e: FormEvent, agentId: string) => {
+    e.preventDefault();
+    setActionError(null);
+    if (!BYTES32_RE.test(rotateKeyId.trim())) {
+      setActionError('New Key ID must be a 32-byte 0x-prefixed hex value (66 characters).');
+      return;
+    }
+    if (rotatePubKey.toLowerCase().includes('private')) {
+      setActionError('Refused: never paste private key material into the browser.');
+      return;
+    }
+
+    let fingerprint: string;
+    try {
+      fingerprint = await computePublicKeyFingerprintBrowser(rotatePubKey);
+    } catch (err) {
+      setActionError(
+        err instanceof Error ? err.message : 'Invalid 1,952-byte ML-DSA-65 public key.',
+      );
+      return;
+    }
+
+    if (!wallet.isConnected || !wallet.address) {
+      setActionError('Connect the owning EVM wallet before rotating an ML-DSA-65 key.');
+      return;
+    }
+
+    try {
+      const timestamp = Math.floor(Date.now() / 1000);
+      const message = buildOwnerKeyAuthMessage({
+        action: 'ROTATE_AGENT_KEY',
+        owner: wallet.address,
+        agentId: agentId as Hex,
+        keyId: rotateKeyId.trim() as Hex,
+        publicKeyFingerprint: fingerprint,
+        timestamp,
+      });
+      const ownerSignature = await wallet.signMessageAsync({ message });
+      const res = await rotateMutation.mutateAsync({
+        agentId: agentId as Hex,
+        owner: wallet.address,
+        newKeyId: rotateKeyId.trim() as Hex,
+        newPublicKey: rotatePubKey.trim(),
+        timestamp,
+        ownerSignature,
+      });
+      if (res.status === 'ready') {
+        setRotatingAgentId(null);
+        setRotateKeyId('');
+        setRotatePubKey('');
+      } else if (res.status === 'error') {
+        setActionError(res.message);
+      } else {
+        setActionError(res.reason);
+      }
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Key rotation failed.');
     }
   };
 
@@ -409,23 +474,75 @@ export function AgentsPqcPage() {
                     </div>
 
                     {agent.keyStatus === 'active' ? (
-                      <button
-                        type="button"
-                        onClick={() =>
-                          handleRevokeKey(
-                            agent.agentId,
-                            agent.activeKeyId,
-                            agent.publicKeyFingerprint,
-                          )
-                        }
-                        disabled={revokeMutation.isPending}
-                        className="inline-flex items-center gap-1.5 px-3 py-2 border border-[#C81E3A] text-[#C81E3A] font-mono text-[11px] uppercase tracking-wider hover:bg-[#C81E3A] hover:text-white transition-colors cursor-pointer shrink-0"
-                      >
-                        <Ban className="w-3.5 h-3.5" />
-                        Revoke Active Key
-                      </button>
+                      <div className="flex flex-wrap items-center gap-2 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setActionError(null);
+                            setRotatingAgentId(
+                              rotatingAgentId === agent.agentId ? null : agent.agentId,
+                            );
+                          }}
+                          className="inline-flex items-center gap-1.5 px-3 py-2 border border-[#141412] bg-white text-[#141412] font-mono text-[11px] uppercase tracking-wider hover:bg-[#ECEAE3] transition-colors cursor-pointer"
+                        >
+                          <RotateCw className="w-3.5 h-3.5" />
+                          {rotatingAgentId === agent.agentId ? 'Cancel Rotation' : 'Rotate Key'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handleRevokeKey(
+                              agent.agentId,
+                              agent.activeKeyId,
+                              agent.publicKeyFingerprint,
+                            )
+                          }
+                          disabled={revokeMutation.isPending}
+                          className="inline-flex items-center gap-1.5 px-3 py-2 border border-[#C81E3A] text-[#C81E3A] font-mono text-[11px] uppercase tracking-wider hover:bg-[#C81E3A] hover:text-white transition-colors cursor-pointer"
+                        >
+                          <Ban className="w-3.5 h-3.5" />
+                          Revoke Active Key
+                        </button>
+                      </div>
                     ) : null}
                   </div>
+
+                  {rotatingAgentId === agent.agentId ? (
+                    <form
+                      onSubmit={(e) => handleRotateKey(e, agent.agentId)}
+                      className="p-4 bg-[#F7F5F0] border border-[#141412]/15 space-y-3"
+                      noValidate
+                    >
+                      <div className="font-mono text-[10px] uppercase tracking-wider text-[#141412] font-semibold">
+                        Owner-Signed ML-DSA-65 Key Rotation (Retires Previous Key Immediately)
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <input
+                          type="text"
+                          value={rotateKeyId}
+                          onChange={(e) => setRotateKeyId(e.target.value)}
+                          placeholder="New Key ID (0x + 64 hex chars)"
+                          aria-label="New Key ID"
+                          className="px-3 py-2 border border-[#141412]/25 bg-white font-mono text-xs focus:outline-none focus:border-[#2B59C3]"
+                        />
+                        <input
+                          type="text"
+                          value={rotatePubKey}
+                          onChange={(e) => setRotatePubKey(e.target.value)}
+                          placeholder="New 1,952-byte ML-DSA-65 Public Key (0x-hex or base64)"
+                          aria-label="New ML-DSA-65 Public Key"
+                          className="px-3 py-2 border border-[#141412]/25 bg-white font-mono text-xs focus:outline-none focus:border-[#2B59C3]"
+                        />
+                      </div>
+                      <button
+                        type="submit"
+                        disabled={rotateMutation.isPending || wallet.isSigningMessage}
+                        className="px-4 py-2 bg-[#0D0E0D] text-[#B8F229] font-mono text-[11px] uppercase tracking-wider cursor-pointer disabled:opacity-50"
+                      >
+                        {rotateMutation.isPending ? 'Rotating…' : 'Sign & Rotate ML-DSA-65 Key'}
+                      </button>
+                    </form>
+                  ) : null}
 
                   {/* Key Rotation History */}
                   <div className="pt-3 border-t border-[#141412]/10 space-y-2">

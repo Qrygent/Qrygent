@@ -101,13 +101,58 @@ describe('PQC HTTP API end-to-end integration', () => {
       body: JSON.stringify({ protocolVersion: SUPPORTED_PROTOCOL_VERSION, request, signature }),
     });
     expect(verifyRes.status).toBe(200);
-    const verifyBody = (await verifyRes.json()) as { status: string; attestation: { requestDigest: string } };
+    const verifyBody = (await verifyRes.json()) as {
+      status: string;
+      verification: {
+        algorithm: string;
+        publicKeyFingerprint: string;
+        verifiedAt: string;
+        integrityStatus: string;
+      };
+      attestation: { requestDigest: string };
+    };
     expect(verifyBody.status).toBe('verified');
+    expect(verifyBody.verification.algorithm).toBe('ML-DSA-65');
+    expect(verifyBody.verification.publicKeyFingerprint).toBe(agentKey.publicKeyFingerprint);
+    expect(verifyBody.verification.integrityStatus).toBe('intact');
     expect(verifyBody.attestation.requestDigest).toBe(digest);
 
     const eventsRes = await fetch(`${baseUrl}/v1/security/events`);
     const eventsBody = (await eventsRes.json()) as { events: Array<{ code: string }> };
     expect(eventsBody.events.some((e) => e.code === 'PAYMENT_ATTESTED')).toBe(true);
     expect(eventsBody.events.some((e) => e.code === 'KEY_REGISTERED')).toBe(true);
+  });
+
+  it('enforces per-IP POST rate limiting with HTTP 429 RATE_LIMITED', async () => {
+    const store = new RegistryStore(null);
+    const signer = new Eip712AttestationSigner(generatePrivateKey(), 120);
+    const verifier = new PaymentVerifierService(store, signer);
+    const limitedServer = createPqcHttpServer(verifier, {
+      corsOrigin: 'http://localhost:5173',
+      rateLimitMaxRequests: 2,
+      rateLimitWindowMs: 60_000,
+    });
+
+    await new Promise<void>((resolve) => {
+      limitedServer.listen(0, '127.0.0.1', () => resolve());
+    });
+    const addr = limitedServer.address() as AddressInfo;
+    const url = `http://127.0.0.1:${addr.port}/v1/payments/verify`;
+
+    try {
+      const r1 = await fetch(url, { method: 'POST', body: '{}' });
+      const r2 = await fetch(url, { method: 'POST', body: '{}' });
+      const r3 = await fetch(url, { method: 'POST', body: '{}' });
+
+      expect(r1.status).toBe(400);
+      expect(r2.status).toBe(400);
+      expect(r3.status).toBe(429);
+      const body = (await r3.json()) as { code: string };
+      expect(body.code).toBe('RATE_LIMITED');
+    } finally {
+      await new Promise<void>((resolve, reject) => {
+        limitedServer.close((err) => (err ? reject(err) : resolve()));
+      });
+    }
   });
 });

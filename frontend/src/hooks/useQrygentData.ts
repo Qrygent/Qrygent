@@ -21,6 +21,7 @@ import {
   pqcVerifierClient,
   type RegisterAgentKeyInput,
   type RevokeAgentKeyInput,
+  type RotateAgentKeyInput,
 } from '../services/pqcVerifier/client';
 
 export function useWalletNetwork() {
@@ -124,6 +125,19 @@ export function useRegisterAgentKey() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (input: RegisterAgentKeyInput) => pqcVerifierClient.registerAgentKey(input),
+    onSuccess: (res) => {
+      if (res.status === 'ready') {
+        void qc.invalidateQueries({ queryKey: ['agents'] });
+        void qc.invalidateQueries({ queryKey: ['security', 'pqc-verifier'] });
+      }
+    },
+  });
+}
+
+export function useRotateAgentKey() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: RotateAgentKeyInput) => pqcVerifierClient.rotateAgentKey(input),
     onSuccess: (res) => {
       if (res.status === 'ready') {
         void qc.invalidateQueries({ queryKey: ['agents'] });

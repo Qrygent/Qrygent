@@ -43,7 +43,11 @@ export function PaymentsPage() {
   const [envelopeText, setEnvelopeText] = useState('');
   const [parseError, setParseError] = useState<string | null>(null);
   const [verifiedReceipt, setVerifiedReceipt] = useState<VerificationSuccessResponse | null>(null);
-  const [rejection, setRejection] = useState<{ code: string; message: string } | null>(null);
+  const [rejection, setRejection] = useState<{
+    code: string;
+    message: string;
+    integrityStatus?: 'tampered_or_invalid' | 'unchecked';
+  } | null>(null);
   const [serviceError, setServiceError] = useState<{ code?: string; message: string } | null>(null);
   const [pipelineState, setPipelineState] =
     useState<AuthorizationPipelineState>(IDLE_PIPELINE_STATE);
@@ -127,7 +131,11 @@ export function PaymentsPage() {
     }
 
     if (result.data.status === 'rejected') {
-      setRejection({ code: result.data.code, message: result.data.message });
+      setRejection({
+        code: result.data.code,
+        message: result.data.message,
+        integrityStatus: result.data.integrityStatus,
+      });
       setPipelineState({
         ...IDLE_PIPELINE_STATE,
         stage1Canonical: 'verified',
@@ -259,8 +267,34 @@ export function PaymentsPage() {
                 </div>
                 <dl className="divide-y divide-[#262924] text-[11px]">
                   <div className="py-2 flex justify-between gap-2">
+                    <dt className="text-[#9C9A91]">Algorithm</dt>
+                    <dd className="text-[#B8F229]">
+                      {verifiedReceipt.verification?.algorithm ?? 'ML-DSA-65'} (FIPS 204)
+                    </dd>
+                  </div>
+                  <div className="py-2 flex justify-between gap-2">
+                    <dt className="text-[#9C9A91]">Payload Integrity</dt>
+                    <dd className="text-[#B8F229] uppercase">
+                      {verifiedReceipt.verification?.integrityStatus ?? 'intact'}
+                    </dd>
+                  </div>
+                  {verifiedReceipt.verification?.publicKeyFingerprint ? (
+                    <div className="py-2 flex justify-between gap-2">
+                      <dt className="text-[#9C9A91]">Public-Key Fingerprint</dt>
+                      <dd className="text-[#F4F1EA]">
+                        {verifiedReceipt.verification.publicKeyFingerprint.slice(0, 22)}…
+                      </dd>
+                    </div>
+                  ) : null}
+                  <div className="py-2 flex justify-between gap-2">
                     <dt className="text-[#9C9A91]">Request ID</dt>
                     <dd className="text-[#F4F1EA]">{verifiedReceipt.requestId}</dd>
+                  </div>
+                  <div className="py-2 flex justify-between gap-2">
+                    <dt className="text-[#9C9A91]">Mandate ID</dt>
+                    <dd className="text-[#F4F1EA]">
+                      {truncateHex(verifiedReceipt.attestation.mandateId, 10, 6)}
+                    </dd>
                   </div>
                   <div className="py-2 flex justify-between gap-2">
                     <dt className="text-[#9C9A91]">Request Digest</dt>
@@ -274,6 +308,12 @@ export function PaymentsPage() {
                       {truncateHex(verifiedReceipt.attestation.verifier, 8, 6)}
                     </dd>
                   </div>
+                  {verifiedReceipt.verification?.verifiedAt ? (
+                    <div className="py-2 flex justify-between gap-2">
+                      <dt className="text-[#9C9A91]">Verified At</dt>
+                      <dd className="text-[#F4F1EA]">{verifiedReceipt.verification.verifiedAt}</dd>
+                    </div>
+                  ) : null}
                   <div className="py-2 flex justify-between gap-2">
                     <dt className="text-[#9C9A91]">Attestation Deadline</dt>
                     <dd className="text-[#F4F1EA]">
@@ -298,6 +338,14 @@ export function PaymentsPage() {
                 <div className="flex items-center gap-2 text-[#f87171] font-mono">
                   <ShieldAlert className="w-4 h-4 shrink-0" />
                   <span>VERIFICATION REJECTED: {rejection.code}</span>
+                </div>
+                <div className="font-mono text-[11px] text-[#9C9A91]">
+                  Payload Integrity:{' '}
+                  <span className="text-[#f87171] uppercase">
+                    {rejection.integrityStatus === 'tampered_or_invalid'
+                      ? 'Tampered or Invalid Signature'
+                      : 'Rejected Before Attestation'}
+                  </span>
                 </div>
                 <p className="text-[#9C9A91] leading-relaxed">{rejection.message}</p>
                 <p className="font-mono text-[10px] text-[#7D7B73]">

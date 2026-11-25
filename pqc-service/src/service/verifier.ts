@@ -28,15 +28,22 @@ export type VerifyPaymentOutcome =
       body: {
         status: 'verified';
         requestId: string;
+        verification: {
+          algorithm: 'ML-DSA-65';
+          publicKeyFingerprint: string;
+          verifiedAt: string;
+          integrityStatus: 'intact';
+        };
         attestation: Eip712Attestation;
       };
     }
   | {
-      httpStatus: 400 | 401 | 403 | 409 | 503;
+      httpStatus: 400 | 401 | 403 | 409 | 429 | 503;
       body: {
         status: 'rejected';
         code: string;
         message: string;
+        integrityStatus?: 'tampered_or_invalid' | 'unchecked';
       };
     };
 
@@ -84,6 +91,7 @@ export class PaymentVerifierService {
         status: 'rejected',
         code,
         message,
+        integrityStatus: code === 'INVALID_SIGNATURE' ? 'tampered_or_invalid' : 'unchecked',
       },
     };
   }
@@ -246,6 +254,12 @@ export class PaymentVerifierService {
       body: {
         status: 'verified',
         requestId,
+        verification: {
+          algorithm: 'ML-DSA-65',
+          publicKeyFingerprint: keyRecord.fingerprint,
+          verifiedAt: new Date(nowUnixSeconds * 1000).toISOString(),
+          integrityStatus: 'intact',
+        },
         attestation,
       },
     };

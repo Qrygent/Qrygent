@@ -181,6 +181,9 @@ Recommended stable codes:
 - `WRONG_CHAIN`
 - `WRONG_VAULT`
 - `VERIFIER_UNAVAILABLE`
+- `RATE_LIMITED` (HTTP `429`, per-IP sliding-window limit on `POST` routes)
 - `INTERNAL_ERROR`
+
+> **Verification metadata:** Successful `POST /v1/payments/verify` responses also include a non-sensitive `verification` block (`algorithm: "ML-DSA-65"`, `publicKeyFingerprint`, `verifiedAt`, `integrityStatus: "intact"`). Shared deterministic hashing and EIP-712 parity fixtures are published in [`docs/CANONICAL_TEST_VECTOR.json`](CANONICAL_TEST_VECTOR.json).
 
 Backend checks are helpful for early rejection and user feedback. The contract remains the final authority for financial constraints.

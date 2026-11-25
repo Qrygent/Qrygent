@@ -15,6 +15,34 @@ const MAX_BODY_BYTES = 65_536; // 64 KB hard limit (ML-DSA-65 envelope is ~8 KB)
 export interface HttpServerOptions {
   corsOrigin: string;
   benchmarksPath?: string;
+  /** Sliding-window rate limit for POST mutation/verification endpoints (default: 60 req / 60s per IP) */
+  rateLimitMaxRequests?: number;
+  rateLimitWindowMs?: number;
+}
+
+class SlidingWindowRateLimiter {
+  private readonly hits = new Map<string, number[]>();
+  private readonly maxRequests: number;
+  private readonly windowMs: number;
+
+  constructor(maxRequests: number, windowMs: number) {
+    this.maxRequests = maxRequests;
+    this.windowMs = windowMs;
+  }
+
+  check(ip: string, nowMs = Date.now()): { allowed: boolean; retryAfterSec: number } {
+    const cutoff = nowMs - this.windowMs;
+    const recent = (this.hits.get(ip) ?? []).filter((ts) => ts > cutoff);
+    if (recent.length >= this.maxRequests) {
+      const oldest = recent[0] ?? nowMs;
+      const retryAfterSec = Math.max(1, Math.ceil((oldest + this.windowMs - nowMs) / 1000));
+      this.hits.set(ip, recent);
+      return { allowed: false, retryAfterSec };
+    }
+    recent.push(nowMs);
+    this.hits.set(ip, recent);
+    return { allowed: true, retryAfterSec: 0 };
+  }
 }
 
 function sendJson(
@@ -65,6 +93,10 @@ export function createPqcHttpServer(
 ) {
   const benchmarksPath =
     options.benchmarksPath ?? resolve(process.cwd(), 'benchmarks', 'latest.json');
+  const rateLimiter = new SlidingWindowRateLimiter(
+    options.rateLimitMaxRequests ?? 60,
+    options.rateLimitWindowMs ?? 60_000,
+  );
 
   return createServer(async (req, res) => {
     const method = req.method ?? 'GET';
@@ -79,6 +111,27 @@ export function createPqcHttpServer(
       });
       res.end();
       return;
+    }
+
+    if (method === 'POST') {
+      const clientIp = req.socket.remoteAddress ?? 'unknown';
+      const limit = rateLimiter.check(clientIp);
+      if (!limit.allowed) {
+        res.writeHead(429, {
+          'Content-Type': 'application/json; charset=utf-8',
+          'Access-Control-Allow-Origin': options.corsOrigin,
+          'Retry-After': String(limit.retryAfterSec),
+          'Cache-Control': 'no-store',
+        });
+        res.end(
+          JSON.stringify({
+            status: 'rejected',
+            code: 'RATE_LIMITED',
+            message: `Too many requests. Retry after ${limit.retryAfterSec}s.`,
+          }),
+        );
+        return;
+      }
     }
 
     try {

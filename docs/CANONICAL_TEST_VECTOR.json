@@ -1,0 +1,38 @@
+{
+  "description": "Deterministic, zero-secret canonical encoding and EIP-712 test vector shared between pqc-service and Solidity Foundry tests. Placeholder addresses/chainId are for hashing parity only—not a live deployment.",
+  "protocolVersion": "1",
+  "domainTagLabel": "QRYGENT_PAYMENT_REQUEST_V1",
+  "domainTag": "0x437be1336bb36dd507609eaf604d4fa56252c0f11c9538df95b6f448b7b304bd",
+  "canonicalRequest": {
+    "chainId": "11155111",
+    "vault": "0x2222222222222222222222222222222222222222",
+    "agentId": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "keyId": "0x1111111111111111111111111111111111111111111111111111111111111111",
+    "mandateId": "0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "token": "0x1111111111111111111111111111111111111111",
+    "recipient": "0x3333333333333333333333333333333333333333",
+    "amount": "250000000",
+    "nonce": "0x0101010101010101010101010101010101010101010101010101010101010101",
+    "deadline": 1800000300
+  },
+  "abiEncodedRequest": "0x437be1336bb36dd507609eaf604d4fa56252c0f11c9538df95b6f448b7b304bd00000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000aa36a70000000000000000000000002222222222222222222222222222222222222222aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1111111111111111111111111111111111111111111111111111111111111111cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc00000000000000000000000011111111111111111111111111111111111111110000000000000000000000003333333333333333333333333333333333333333000000000000000000000000000000000000000000000000000000000ee6b2800101010101010101010101010101010101010101010101010101010101010101000000000000000000000000000000000000000000000000000000006b49d32c",
+  "expectedRequestDigest": "0x47bf2521e0383322710c58910654ae992c2c97db3ac137818092e065276d6a89",
+  "eip712": {
+    "domain": {
+      "name": "QrygentVault",
+      "version": "1",
+      "chainId": "11155111",
+      "verifyingContract": "0x2222222222222222222222222222222222222222"
+    },
+    "primaryType": "PaymentAttestation",
+    "typeString": "PaymentAttestation(bytes32 requestDigest,bytes32 agentId,bytes32 mandateId,bytes32 nonce,uint256 deadline)",
+    "message": {
+      "requestDigest": "0x47bf2521e0383322710c58910654ae992c2c97db3ac137818092e065276d6a89",
+      "agentId": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "mandateId": "0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "nonce": "0x0101010101010101010101010101010101010101010101010101010101010101",
+      "deadline": 1800000120
+    },
+    "expectedEip712Digest": "0x6aff53e6f88587a333b2a78ff2d98ca5cc8d729bbdd1cbdb607538fbe8421192"
+  }
+}

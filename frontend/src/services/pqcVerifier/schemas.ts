@@ -40,9 +40,17 @@ export const eip712AttestationSchema = z.object({
   signature: hexStringSchema,
 });
 
+export const verificationMetadataSchema = z.object({
+  algorithm: z.literal('ML-DSA-65'),
+  publicKeyFingerprint: z.string().min(1),
+  verifiedAt: z.string().min(1),
+  integrityStatus: z.literal('intact'),
+});
+
 export const verificationSuccessSchema = z.object({
   status: z.literal('verified'),
   requestId: z.string().min(1),
+  verification: verificationMetadataSchema.optional(),
   attestation: eip712AttestationSchema,
 });
 
@@ -50,6 +58,7 @@ export const verificationRejectedSchema = z.object({
   status: z.literal('rejected'),
   code: z.string().min(1),
   message: z.string().min(1),
+  integrityStatus: z.enum(['tampered_or_invalid', 'unchecked']).optional(),
 });
 
 export const verificationResponseSchema = z.discriminatedUnion('status', [

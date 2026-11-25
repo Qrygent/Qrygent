@@ -154,5 +154,37 @@ describe('PqcVerifierClient fail-closed behavior', () => {
     );
     const bench = await client.fetchBenchmarks();
     expect(bench.status).toBe('unconfigured');
+
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          agent: {
+            agentId: `0x${'aa'.repeat(32)}`,
+            label: 'Rotated Agent',
+            owner: '0x4444444444444444444444444444444444444444',
+            algorithm: 'ML-DSA-65',
+            activeKeyId: `0x${'22'.repeat(32)}`,
+            publicKeyFingerprint: 'sha256:abcd',
+            keyStatus: 'active',
+            registeredAt: 1800000000,
+            rotationHistory: [],
+            assignedMandateIds: [],
+          },
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      ),
+    );
+    const rotated = await client.rotateAgentKey({
+      agentId: `0x${'aa'.repeat(32)}`,
+      owner: '0x4444444444444444444444444444444444444444',
+      newKeyId: `0x${'22'.repeat(32)}`,
+      newPublicKey: `0x${'11'.repeat(1952)}`,
+      timestamp: 1800000000,
+      ownerSignature: `0x${'ef'.repeat(65)}`,
+    });
+    expect(rotated.status).toBe('ready');
+    if (rotated.status === 'ready') {
+      expect(rotated.data.activeKeyId).toBe(`0x${'22'.repeat(32)}`);
+    }
   });
 });

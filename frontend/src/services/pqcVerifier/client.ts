@@ -104,6 +104,15 @@ export interface RegisterAgentKeyInput {
   ownerSignature: Hex;
 }
 
+export interface RotateAgentKeyInput {
+  agentId: Hex;
+  owner: Address;
+  newKeyId: Hex;
+  newPublicKey: string;
+  timestamp: number;
+  ownerSignature: Hex;
+}
+
 export interface RevokeAgentKeyInput {
   agentId: Hex;
   owner: Address;
@@ -327,6 +336,54 @@ export class PqcVerifierClient {
         status: 'error',
         code: 'VERIFIER_UNAVAILABLE',
         message: `Unable to reach ${this.baseUrl}/v1/agents/register.`,
+      };
+    }
+  }
+
+  async rotateAgentKey(input: RotateAgentKeyInput): Promise<ServiceResult<AgentRecord>> {
+    if (!this.baseUrl) {
+      return {
+        status: 'unconfigured',
+        reason: 'PQC verifier base URL is not configured.',
+        missing: ['VITE_PQC_SERVICE_BASE_URL'],
+        owner: 'Product / Frontend / PQC Lead',
+      };
+    }
+
+    try {
+      const response = await fetchWithTimeout(
+        `${this.baseUrl}/v1/agents/${input.agentId.toLowerCase()}/rotate`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          body: JSON.stringify({
+            owner: input.owner,
+            newKeyId: input.newKeyId,
+            newPublicKey: input.newPublicKey,
+            timestamp: input.timestamp,
+            ownerSignature: input.ownerSignature,
+          }),
+        },
+      );
+      const json = (await response.json()) as { agent?: unknown; message?: string; code?: string };
+      if (!response.ok) {
+        return {
+          status: 'error',
+          httpStatus: response.status,
+          code: json.code,
+          message: json.message ?? `Key rotation failed (HTTP ${response.status}).`,
+        };
+      }
+      const parsed = agentRecordSchema.safeParse(json.agent);
+      if (!parsed.success) {
+        return { status: 'error', message: 'Invalid agent payload returned from verifier.' };
+      }
+      return { status: 'ready', data: parsed.data };
+    } catch {
+      return {
+        status: 'error',
+        code: 'VERIFIER_UNAVAILABLE',
+        message: `Unable to reach ${this.baseUrl}/v1/agents/${input.agentId}/rotate.`,
       };
     }
   }
