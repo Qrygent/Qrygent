@@ -1,0 +1,82 @@
+@import "tailwindcss";
+
+@theme {
+  --font-display: "Syne", "Space Grotesk", -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "Cascadia Code", Menlo, Consolas, monospace;
+
+  /* Atelier Cipher — Chiaroscuro Dual-Polarity Palette */
+  --color-void: #0D0E0D;
+  --color-void-elevated: #151714;
+  --color-void-border: #262924;
+  --color-chalk-ink: #F4F1EA;
+  --color-chalk-muted: #9C9A91;
+  --color-chartreuse: #B8F229;
+
+  --color-bone: #F7F5F0;
+  --color-bone-recess: #ECEAE3;
+  --color-chalk: #FFFFFF;
+  --color-ink: #141412;
+  --color-ink-muted: #5F5E56;
+  --color-olive: #2E4A00;
+
+  --color-bridge: #2B59C3;
+  --color-carmine: #C81E3A;
+  --color-ochre: #B45309;
+}
+
+@layer base {
+  html,
+  body {
+    background-color: var(--color-bone);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  code,
+  pre,
+  .font-mono {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+.font-display {
+  font-family: var(--font-display);
+  letter-spacing: -0.03em;
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Subtle vertical editorial column lines on the Warm Bone ledger */
+.bg-atelier-grid {
+  background-image: linear-gradient(to right, rgba(20, 20, 18, 0.045) 1px, transparent 1px);
+  background-size: 72px 72px;
+}
+
+/* Subtle coordinate lattice dots on the Void Ink cryptographic spine */
+.bg-pqc-grid {
+  background-image: radial-gradient(rgba(244, 241, 234, 0.09) 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+
+/* Focus visibility for keyboard accessibility */
+:focus-visible {
+  outline: 2px solid var(--color-bridge);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

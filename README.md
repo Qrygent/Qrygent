@@ -47,7 +47,25 @@ qrygent/
 
 ## Current status
 
-This repository begins with the product and engineering specifications. Implementation status, deployed addresses and supported network configuration must be updated only after they are tested and verified.
+- **`frontend/`**: React + TypeScript + Tailwind CSS + `wagmi`/`viem` application scaffolded on `feat/frontend-foundation`. See [`frontend/README.md`](frontend/README.md) and [`docs/FRONTEND_INTEGRATION_REQUIREMENTS.md`](docs/FRONTEND_INTEGRATION_REQUIREMENTS.md) for active integration boundaries and pending contract/API dependencies.
+- **`contracts/` & `pqc-service/`**: Pending implementation; deployed addresses and supported network configuration must be updated only after they are tested and verified.
+
+## Environment configuration
+
+Copy [`.env.example`](.env.example) to `.env` (untracked) and populate verified public values only:
+
+```env
+VITE_CHAIN_ID=
+VITE_RPC_URL=
+VITE_EXPLORER_URL=
+VITE_TOKEN_ADDRESS=
+VITE_VAULT_ADDRESS=
+VITE_PQC_SERVICE_BASE_URL=http://127.0.0.1:8000
+PQC_SERVICE_BASE_URL=http://127.0.0.1:8000
+VITE_WALLET_CONNECT_PROJECT_ID=
+```
+
+> **Important:** Any `VITE_*` variable is exposed in public frontend bundles. Never place private keys, verifier signing keys, wallet seed phrases, or API secrets in frontend environment variables. The frontend validates all public `VITE_*` variables at startup and surfaces actionable diagnostics under **Settings** without silently mocking missing services.
 
 ## Getting started
 
