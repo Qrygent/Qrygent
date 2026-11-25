@@ -125,7 +125,28 @@ Returns service liveness. It must not disclose secrets or sensitive configuratio
 
 ### Key registration and rotation
 
-Key registration must be owner-authorized and tied to the on-chain or otherwise authoritative agent registry. Do not expose an endpoint that accepts an arbitrary public key and silently treats it as trusted. Define the registration proof and source of truth before implementing these endpoints.
+Key registration, rotation, and revocation are owner-authorized via EVM wallet EIP-191 personal signatures (`verifyMessage`) over a deterministic authorization payload binding `Action`, `Owner`, `AgentId`, `KeyId`, `Fingerprint`, and `Timestamp`:
+
+- `GET /v1/agents` — returns registered agents, active `ML-DSA-65` public-key fingerprints, statuses, and key rotation/revocation history (never returns private keys).
+- `POST /v1/agents/register` — verifies exact 1,952-byte ML-DSA-65 public key length and owner wallet EIP-191 signature before storing the public key.
+- `POST /v1/agents/:agentId/rotate` — owner-signed rotation to a new `keyId` + 1,952-byte ML-DSA-65 public key; immediately retires the previous key.
+- `POST /v1/agents/:agentId/revoke` — owner-signed immediate revocation; subsequent payment verification attempts with that key fail closed with `REVOKED_KEY`.
+
+### Security audit log & measured benchmarks
+
+- `GET /v1/security/events` — returns recorded off-chain PQC verification outcomes, rejections (`INVALID_SIGNATURE`, `NONCE_ALREADY_USED`, `REVOKED_KEY`, `REQUEST_EXPIRED`, etc.), and key-lifecycle events.
+- `GET /v1/benchmarks` — serves measured ML-DSA-65 vs. ECDSA benchmark telemetry from `pqc-service/benchmarks/latest.json` (returns HTTP 404 when no benchmark run exists).
+
+### Reference canonical digest & EIP-712 typed data (implemented in `pqc-service`)
+
+- **Canonical payment request digest (Solidity-compatible `abi.encode`):**
+  `keccak256(abi.encode(keccak256("QRYGENT_PAYMENT_REQUEST_V1"), uint256(1), chainId, vault, agentId, keyId, mandateId, token, recipient, amount, nonce, deadline))`
+- **EIP-712 Domain:** `{ name: "QrygentVault", version: "1", chainId, verifyingContract: vault }`
+- **EIP-712 Primary Type (`PaymentAttestation`):**
+  `PaymentAttestation(bytes32 requestDigest,bytes32 agentId,bytes32 mandateId,bytes32 nonce,uint256 deadline)`
+- **Signature & key encoding:** `0x`-prefixed hex (preferred) or strict base64, enforcing exact NIST FIPS 204 lengths (`1,952` bytes public key, `3,309` bytes signature).
+
+> **Handoff note for Smart Contract Lead:** Both the canonical ABI digest and `PaymentAttestation` EIP-712 struct above are implemented and tested in `pqc-service/src/protocol/canonical.ts` and `pqc-service/src/crypto/eip712.ts` and await joint sign-off before Solidity contract freeze.
 
 ## 5. Attestation requirements
 

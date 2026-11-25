@@ -113,4 +113,46 @@ describe('PqcVerifierClient fail-closed behavior', () => {
       );
     }
   });
+
+  it('fetches and validates real agent registry, security events, and measured benchmarks', async () => {
+    const client = new PqcVerifierClient('http://127.0.0.1:8000');
+
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      new Response(JSON.stringify({ agents: [] }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+    const agents = await client.listAgents();
+    expect(agents.status).toBe('ready');
+
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          events: [
+            {
+              id: 'evt_1',
+              timestamp: 1800000000,
+              layer: 'PQC_VERIFIER',
+              code: 'INVALID_SIGNATURE',
+              summary: 'Rejected tampered payload',
+              severity: 'critical',
+            },
+          ],
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      ),
+    );
+    const events = await client.listSecurityEvents();
+    expect(events.status).toBe('ready');
+    if (events.status === 'ready') {
+      expect(events.data[0]?.code).toBe('INVALID_SIGNATURE');
+    }
+
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      new Response(JSON.stringify({ status: 'unavailable' }), { status: 404 }),
+    );
+    const bench = await client.fetchBenchmarks();
+    expect(bench.status).toBe('unconfigured');
+  });
 });

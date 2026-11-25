@@ -1,7 +1,9 @@
 import { Cpu, RefreshCw, ShieldAlert, ShieldCheck } from 'lucide-react';
 import { envConfig } from '../config/env';
+import { formatUtcTimestamp, truncateHex } from '../domain/units';
 import { useSecurityEvents, useVerifierHealth } from '../hooks/useQrygentData';
 import {
+  ErrorAlert,
   LedgerCard,
   PqcDarkCard,
   SectionHeader,
@@ -72,6 +74,7 @@ export function SecurityPage() {
   const healthQuery = useVerifierHealth();
   const { verifierEvents, contractEvents } = useSecurityEvents();
   const health = healthQuery.data;
+  const vEvents = verifierEvents.data;
 
   return (
     <div className="space-y-8">
@@ -83,11 +86,16 @@ export function SecurityPage() {
         actions={
           <button
             type="button"
-            onClick={() => healthQuery.refetch()}
+            onClick={() => {
+              void healthQuery.refetch();
+              void verifierEvents.refetch();
+            }}
             className="inline-flex items-center gap-2 px-4 py-2.5 border border-[#141412] bg-white font-mono text-xs uppercase tracking-wider cursor-pointer hover:bg-[#ECEAE3]"
           >
-            <RefreshCw className={`w-3.5 h-3.5 ${healthQuery.isFetching ? 'animate-spin' : ''}`} />
-            Probe Verifier Health
+            <RefreshCw
+              className={`w-3.5 h-3.5 ${healthQuery.isFetching || verifierEvents.isFetching ? 'animate-spin' : ''}`}
+            />
+            Refresh Telemetry
           </button>
         }
       />
@@ -132,17 +140,61 @@ export function SecurityPage() {
           <div className="flex items-center justify-between">
             <h2 className="font-mono text-xs uppercase tracking-widest text-[#141412] font-semibold flex items-center gap-2">
               <ShieldAlert className="w-4 h-4 text-[#C81E3A]" />
-              Layer 1 · PQC Verifier Rejections
+              Layer 1 · PQC Verifier Rejections &amp; Key Audit
             </h2>
             <ZoneBadge tone="pqc">Off-Chain ML-DSA-65</ZoneBadge>
           </div>
-          {verifierEvents.data?.status === 'unconfigured' ? (
+
+          {vEvents?.status === 'unconfigured' ? (
             <UnavailableIntegrationCard
-              title="Off-Chain Verification Audit Feed Pending"
-              reason={verifierEvents.data.reason}
-              missing={verifierEvents.data.missing}
-              owner={verifierEvents.data.owner}
+              title="Off-Chain Verification Audit Feed Unconfigured"
+              reason={vEvents.reason}
+              missing={vEvents.missing}
+              owner={vEvents.owner}
             />
+          ) : vEvents?.status === 'error' ? (
+            <ErrorAlert
+              title="Unable to Reach PQC Security Audit Feed"
+              code={vEvents.code}
+              message={vEvents.message}
+            />
+          ) : vEvents?.status === 'ready' ? (
+            vEvents.data.length === 0 ? (
+              <LedgerCard className="p-6 text-xs text-[#5F5E56]">
+                Connected to <code>GET /v1/security/events</code>. Zero off-chain security events
+                have been recorded yet.
+              </LedgerCard>
+            ) : (
+              <LedgerCard className="divide-y divide-[#141412]/10">
+                {vEvents.data.slice(0, 12).map((evt) => (
+                  <div key={evt.id} className="p-4 space-y-1.5">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <ZoneBadge
+                        tone={
+                          evt.severity === 'critical' || evt.severity === 'high'
+                            ? 'error'
+                            : evt.severity === 'medium'
+                              ? 'warning'
+                              : 'vault'
+                        }
+                      >
+                        {evt.code}
+                      </ZoneBadge>
+                      <span className="font-mono text-[10px] text-[#5F5E56]">
+                        {formatUtcTimestamp(evt.timestamp)}
+                      </span>
+                    </div>
+                    <p className="text-xs text-[#141412]">{evt.summary}</p>
+                    {evt.agentId || evt.requestId ? (
+                      <div className="font-mono text-[10px] text-[#5F5E56]">
+                        {evt.agentId ? `Agent: ${truncateHex(evt.agentId, 8, 6)} ` : ''}
+                        {evt.requestId ? `· Req: ${evt.requestId}` : ''}
+                      </div>
+                    ) : null}
+                  </div>
+                ))}
+              </LedgerCard>
+            )
           ) : null}
         </section>
 
@@ -165,7 +217,7 @@ export function SecurityPage() {
         </section>
       </div>
 
-      {/* Enforcement Architecture Reference Table (from docs/API.md & docs/SECURITY.md) */}
+      {/* Enforcement Architecture Reference Table */}
       <LedgerCard className="overflow-hidden">
         <div className="px-6 py-4 border-b border-[#141412]/15 flex flex-wrap items-center justify-between gap-2">
           <div>
@@ -173,7 +225,7 @@ export function SecurityPage() {
               Documented Threat &amp; Enforcement Separation Matrix
             </h2>
             <p className="text-xs text-[#5F5E56] mt-0.5">
-              Source: <code>docs/API.md</code> §6 &amp; <code>docs/SECURITY.md</code> §4 (reference
+              Source: <code>docs/API.md</code> &amp; <code>docs/SECURITY.md</code> §4 (reference
               specification, not live event counts)
             </p>
           </div>

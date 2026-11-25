@@ -56,3 +56,71 @@ export const verificationResponseSchema = z.discriminatedUnion('status', [
   verificationSuccessSchema,
   verificationRejectedSchema,
 ]);
+
+export const keyStatusSchema = z.enum(['active', 'rotated', 'revoked', 'pending']);
+
+export const keyRotationEntrySchema = z.object({
+  keyId: z.string().min(1),
+  fingerprint: z.string().min(1),
+  algorithm: z.literal('ML-DSA-65'),
+  registeredAt: z.number().int().nonnegative(),
+  revokedAt: z.number().int().nonnegative().optional(),
+  status: keyStatusSchema,
+});
+
+export const agentRecordSchema = z.object({
+  agentId: z.string().min(1),
+  label: z.string().min(1),
+  owner: addressSchema,
+  algorithm: z.literal('ML-DSA-65'),
+  activeKeyId: z.string().min(1),
+  publicKeyFingerprint: z.string().min(1),
+  keyStatus: keyStatusSchema,
+  registeredAt: z.number().int().nonnegative(),
+  rotationHistory: z.array(keyRotationEntrySchema),
+  assignedMandateIds: z.array(z.string()),
+});
+
+export const agentsListResponseSchema = z.object({
+  agents: z.array(agentRecordSchema),
+});
+
+export const securityEventSchema = z.object({
+  id: z.string().min(1),
+  timestamp: z.number().int().nonnegative(),
+  layer: z.enum(['PQC_VERIFIER', 'SMART_CONTRACT']),
+  code: z.string().min(1),
+  summary: z.string().min(1),
+  agentId: z.string().optional(),
+  mandateId: z.string().optional(),
+  requestId: z.string().optional(),
+  txHash: hexStringSchema.optional(),
+  severity: z.enum(['critical', 'high', 'medium', 'info']),
+});
+
+export const securityEventsResponseSchema = z.object({
+  events: z.array(securityEventSchema),
+});
+
+export const benchmarkDatasetSchema = z.object({
+  measured: z.literal(true),
+  library: z.string().min(1),
+  libraryVersion: z.string().min(1),
+  runtime: z.string().min(1),
+  cpu: z.string().min(1),
+  iterations: z.number().int().positive(),
+  measuredAt: z.string().min(1),
+  notes: z.string(),
+  metrics: z
+    .array(
+      z.object({
+        algorithm: z.string().min(1),
+        keygenMs: z.number().nonnegative(),
+        signMs: z.number().nonnegative(),
+        verifyMs: z.number().nonnegative(),
+        publicKeyBytes: z.number().int().positive(),
+        signatureBytes: z.number().int().positive(),
+      }),
+    )
+    .min(1),
+});

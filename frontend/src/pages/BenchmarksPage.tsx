@@ -1,8 +1,8 @@
 import { useState, type ChangeEvent } from 'react';
-import { z } from 'zod';
 import { Gauge, Upload } from 'lucide-react';
 import type { BenchmarkDataset } from '../domain/types';
 import { useBenchmarks } from '../hooks/useQrygentData';
+import { benchmarkDatasetSchema } from '../services/pqcVerifier/schemas';
 import {
   ErrorAlert,
   LedgerCard,
@@ -12,28 +12,34 @@ import {
   ZoneBadge,
 } from '../components/primitives/AtelierPrimitives';
 
-const benchmarkDatasetSchema = z.object({
-  measured: z.literal(true),
-  library: z.string().min(1),
-  libraryVersion: z.string().min(1),
-  runtime: z.string().min(1),
-  cpu: z.string().min(1),
-  iterations: z.number().int().positive(),
-  measuredAt: z.string().min(1),
-  notes: z.string(),
-  metrics: z
-    .array(
-      z.object({
-        algorithm: z.string().min(1),
-        keygenMs: z.number().nonnegative(),
-        signMs: z.number().nonnegative(),
-        verifyMs: z.number().nonnegative(),
-        publicKeyBytes: z.number().int().positive(),
-        signatureBytes: z.number().int().positive(),
-      }),
-    )
-    .min(1),
-});
+function ComparisonBar({
+  label,
+  value,
+  max,
+  unit,
+  accentClass,
+}: {
+  label: string;
+  value: number;
+  max: number;
+  unit: string;
+  accentClass: string;
+}) {
+  const pct = max > 0 ? Math.max(4, Math.min(100, (value / max) * 100)) : 0;
+  return (
+    <div className="space-y-1">
+      <div className="flex justify-between font-mono text-[11px]">
+        <span className="text-[#141412]">{label}</span>
+        <span className="text-[#5F5E56]">
+          {value.toLocaleString(undefined, { maximumFractionDigits: 3 })} {unit}
+        </span>
+      </div>
+      <div className="h-2.5 bg-[#ECEAE3] border border-[#141412]/15 overflow-hidden">
+        <div className={`h-full ${accentClass}`} style={{ width: `${pct}%` }} />
+      </div>
+    </div>
+  );
+}
 
 export function BenchmarksPage() {
   const benchmarksQuery = useBenchmarks();
@@ -65,13 +71,23 @@ export function BenchmarksPage() {
     }
   };
 
+  const maxSignMs = activeDataset
+    ? Math.max(...activeDataset.metrics.map((m) => m.signMs), 1)
+    : 1;
+  const maxVerifyMs = activeDataset
+    ? Math.max(...activeDataset.metrics.map((m) => m.verifyMs), 1)
+    : 1;
+  const maxSigBytes = activeDataset
+    ? Math.max(...activeDataset.metrics.map((m) => m.signatureBytes), 1)
+    : 1;
+
   return (
     <div className="space-y-8">
       <SectionHeader
         index="07"
         eyebrow="Reproducible Cryptographic Telemetry"
         title="Cryptographic Benchmarks"
-        description="Inspect reproducible ML-DSA-65 vs. ECDSA timing and byte-size measurements. Qrygent never fabricates performance numbers or claims universal superiority from incomplete runs."
+        description="Inspect reproducible ML-DSA-65 vs. ECDSA timing and byte-size measurements loaded from pqc-service or a measured JSON artifact. Qrygent never fabricates performance numbers."
         actions={
           <label className="inline-flex items-center gap-2 px-4 py-2.5 bg-[#0D0E0D] text-[#B8F229] font-mono text-xs uppercase tracking-wider cursor-pointer hover:bg-[#1a1c19]">
             <Upload className="w-3.5 h-3.5" />
@@ -90,23 +106,20 @@ export function BenchmarksPage() {
 
       {activeDataset ? (
         <div className="space-y-6">
-          {/* Provenance Metadata */}
-          <PqcDarkCard className="p-6">
+          <PqcDarkCard className="p-6 space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-[#262924]">
               <div className="flex items-center gap-2">
                 <Gauge className="w-4 h-4 text-[#B8F229]" />
                 <span className="font-mono text-xs uppercase tracking-wider text-[#B8F229]">
-                  Measured Benchmark Dataset Loaded
+                  Measured Benchmark Dataset
                 </span>
               </div>
               <ZoneBadge tone="pqc">Measured · {activeDataset.iterations} iterations</ZoneBadge>
             </div>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-4 font-mono text-xs">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 font-mono text-xs">
               <div>
-                <div className="text-[10px] uppercase text-[#9C9A91]">Library</div>
-                <div className="text-[#F4F1EA] mt-1">
-                  {activeDataset.library}@{activeDataset.libraryVersion}
-                </div>
+                <div className="text-[10px] uppercase text-[#9C9A91]">Libraries</div>
+                <div className="text-[#F4F1EA] mt-1">{activeDataset.libraryVersion}</div>
               </div>
               <div>
                 <div className="text-[10px] uppercase text-[#9C9A91]">Runtime</div>
@@ -121,9 +134,63 @@ export function BenchmarksPage() {
                 <div className="text-[#F4F1EA] mt-1">{activeDataset.measuredAt}</div>
               </div>
             </div>
+            <p className="text-xs text-[#9C9A91] leading-relaxed pt-2 border-t border-[#262924]">
+              {activeDataset.notes}
+            </p>
           </PqcDarkCard>
 
-          {/* Measured Comparison Table */}
+          {/* Visual Latency & Payload Comparison */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            <LedgerCard className="p-5 space-y-4">
+              <div className="font-mono text-[10px] uppercase tracking-wider text-[#5F5E56]">
+                Signing Latency (Mean ms)
+              </div>
+              {activeDataset.metrics.map((m, idx) => (
+                <ComparisonBar
+                  key={`sign-${m.algorithm}`}
+                  label={m.algorithm}
+                  value={m.signMs}
+                  max={maxSignMs}
+                  unit="ms"
+                  accentClass={idx === 0 ? 'bg-[#0D0E0D]' : 'bg-[#2B59C3]'}
+                />
+              ))}
+            </LedgerCard>
+
+            <LedgerCard className="p-5 space-y-4">
+              <div className="font-mono text-[10px] uppercase tracking-wider text-[#5F5E56]">
+                Verification Latency (Mean ms)
+              </div>
+              {activeDataset.metrics.map((m, idx) => (
+                <ComparisonBar
+                  key={`verify-${m.algorithm}`}
+                  label={m.algorithm}
+                  value={m.verifyMs}
+                  max={maxVerifyMs}
+                  unit="ms"
+                  accentClass={idx === 0 ? 'bg-[#2E4A00]' : 'bg-[#2B59C3]'}
+                />
+              ))}
+            </LedgerCard>
+
+            <LedgerCard className="p-5 space-y-4">
+              <div className="font-mono text-[10px] uppercase tracking-wider text-[#5F5E56]">
+                Signature Size (Bytes)
+              </div>
+              {activeDataset.metrics.map((m, idx) => (
+                <ComparisonBar
+                  key={`size-${m.algorithm}`}
+                  label={m.algorithm}
+                  value={m.signatureBytes}
+                  max={maxSigBytes}
+                  unit="B"
+                  accentClass={idx === 0 ? 'bg-[#C81E3A]' : 'bg-[#2B59C3]'}
+                />
+              ))}
+            </LedgerCard>
+          </div>
+
+          {/* Exact Measured Table */}
           <LedgerCard className="overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse">
@@ -155,49 +222,34 @@ export function BenchmarksPage() {
         </div>
       ) : (
         <div className="space-y-6">
-          {benchmarksQuery.data?.status === 'unconfigured' ? (
+          {benchmarksQuery.data?.status === 'error' ? (
+            <ErrorAlert
+              title="Unable to Fetch Measured Benchmarks"
+              code={benchmarksQuery.data.code}
+              message={benchmarksQuery.data.message}
+            />
+          ) : benchmarksQuery.data?.status === 'unconfigured' ? (
             <UnavailableIntegrationCard
-              title="No Measured PQC Benchmark Dataset Available Yet"
+              title="No Measured PQC Benchmark Dataset Loaded Yet"
               reason={benchmarksQuery.data.reason}
               missing={benchmarksQuery.data.missing}
               owner={benchmarksQuery.data.owner}
             />
           ) : null}
 
-          <LedgerCard className="p-6 space-y-4">
+          <LedgerCard className="p-6 space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-[#141412]/10">
               <h2 className="font-mono text-xs uppercase tracking-wider font-semibold text-[#141412]">
-                Expected Measured Benchmark Artifact Schema
+                Generate &amp; Load Measured Benchmarks
               </h2>
               <ZoneBadge tone="neutral">Reproducibility Spec</ZoneBadge>
             </div>
             <p className="text-xs text-[#5F5E56] leading-relaxed">
-              Per <code>docs/SECURITY.md</code> §2 &amp; §6, benchmarks must record the exact
-              cryptographic library, version, runtime, CPU, and iteration count, and must not be
-              used to claim universal security or speed superiority. Once the PQC benchmark script
-              outputs a JSON artifact matching the schema below, you can upload it above or serve it
-              from the PQC service.
+              Run <code>npm --prefix pqc-service run bench</code> to produce{' '}
+              <code>pqc-service/benchmarks/latest.json</code> and <code>docs/BENCHMARKS.md</code>,
+              then either run <code>pqc-service</code> (served at <code>GET /v1/benchmarks</code>)
+              or upload the generated JSON file using the button above.
             </p>
-            <pre className="p-4 bg-[#0D0E0D] text-[#F4F1EA] font-mono text-[11px] overflow-x-auto rounded-[2px]">{`{
-  "measured": true,
-  "library": "<e.g. @noble/post-quantum or liboqs>",
-  "libraryVersion": "<semver>",
-  "runtime": "<Node / Python version>",
-  "cpu": "<CPU model>",
-  "iterations": 1000,
-  "measuredAt": "2026-11-25T00:00:00Z",
-  "notes": "Methodology & build flags",
-  "metrics": [
-    {
-      "algorithm": "ML-DSA-65",
-      "keygenMs": 0.0,
-      "signMs": 0.0,
-      "verifyMs": 0.0,
-      "publicKeyBytes": 1952,
-      "signatureBytes": 3309
-    }
-  ]
-}`}</pre>
           </LedgerCard>
         </div>
       )}

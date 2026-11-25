@@ -319,15 +319,38 @@ export function OverviewPage() {
               Open Security Monitor
             </Link>
           </div>
-          {verifierEvents.data?.status === 'unconfigured' ||
-          contractEvents.data?.status === 'unconfigured' ? (
+          {verifierEvents.data?.status === 'ready' && verifierEvents.data.data.length > 0 ? (
+            <LedgerCard className="divide-y divide-[#141412]/10">
+              {verifierEvents.data.data.slice(0, 4).map((evt) => (
+                <div key={evt.id} className="p-3.5 space-y-1">
+                  <div className="flex items-center justify-between gap-2">
+                    <ZoneBadge
+                      tone={
+                        evt.severity === 'critical' || evt.severity === 'high'
+                          ? 'error'
+                          : evt.severity === 'medium'
+                            ? 'warning'
+                            : 'vault'
+                      }
+                    >
+                      {evt.code}
+                    </ZoneBadge>
+                    <span className="font-mono text-[10px] text-[#5F5E56]">PQC Verifier</span>
+                  </div>
+                  <p className="text-xs text-[#141412]">{evt.summary}</p>
+                </div>
+              ))}
+            </LedgerCard>
+          ) : verifierEvents.data?.status === 'unconfigured' ||
+            verifierEvents.data?.status === 'error' ||
+            contractEvents.data?.status === 'unconfigured' ? (
             <UnavailableIntegrationCard
               compact
-              title="Security Event Feeds Not Yet Connected"
-              reason="Qrygent separates off-chain PQC verifier rejections from on-chain smart contract reverts. Connect the verifier audit endpoint and Vault event ABI to stream live security events."
+              title="Security Event Feeds Pending Live Services"
+              reason="Qrygent separates off-chain PQC verifier rejections from on-chain smart contract reverts. Start pqc-service for Layer 1 events and supply the Vault event ABI for Layer 2 events."
               missing={[
-                'PQC verifier audit log endpoint (docs/API.md)',
-                'Vault contract events ABI (contracts/)',
+                'Running pqc-service at VITE_PQC_SERVICE_BASE_URL (Layer 1)',
+                'Vault contract events ABI (Layer 2)',
               ]}
               owner="Shared (Product/PQC + Smart Contract Lead)"
             />

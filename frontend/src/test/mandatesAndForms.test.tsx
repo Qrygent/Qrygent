@@ -72,11 +72,12 @@ describe('Agents & ML-DSA-65 public key registration guardrails', () => {
 
     await user.type(screen.getByLabelText(/Agent Label/i), 'Treasury Agent');
     await user.type(screen.getByLabelText(/Agent ID/i), `0x${'aa'.repeat(32)}`);
+    await user.type(screen.getByLabelText(/Key ID/i), `0x${'bb'.repeat(32)}`);
     await user.type(
       screen.getByLabelText(/ML-DSA-65 Public Key/i),
       '-----BEGIN PRIVATE KEY-----' + 'A'.repeat(70),
     );
-    await user.click(screen.getByRole('button', { name: /Validate Registration Payload/i }));
+    await user.click(screen.getByRole('button', { name: /Sign & Register ML-DSA-65 Key/i }));
 
     expect(screen.getByText(/never paste private key material/i)).toBeInTheDocument();
   });
