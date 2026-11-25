@@ -51,7 +51,7 @@ describe('Qrygent App honest integration states & security representation', () =
       screen.getByRole('heading', { name: /Cryptographic Benchmarks/i }),
     ).toBeInTheDocument();
     expect(
-      await screen.findByText(/No Measured PQC Benchmark Dataset Available Yet/i),
+      await screen.findByText(/No Measured PQC Benchmark Dataset Loaded Yet/i),
     ).toBeInTheDocument();
   });
 

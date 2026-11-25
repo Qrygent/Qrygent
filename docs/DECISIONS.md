@@ -24,16 +24,16 @@ Record material decisions here. Do not leave important decisions only in chat.
 
 ## ADR-004 — Agent key custody
 
-**Status:** Open  
+**Status:** Accepted (Implemented in `pqc-service/src/cli/agentSimulator.ts`; pending joint final sign-off)  
 **Options:** local agent process/key file; browser-managed key; backend-managed key service.  
-**Recommendation:** local agent process with private key outside the repository and outside browser localStorage.  
+**Decision:** Local agent process with test-only ML-DSA-65 private keys stored outside Git (`.qrygent-local/`, gitignored, `0o600`) and strictly outside browser storage and verifier APIs.  
 **Decision owner:** Product/PQC Lead, reviewed jointly.
 
 ## ADR-005 — Agent execution model
 
-**Status:** Open  
+**Status:** Accepted (Implemented in `pqc-service/src/cli/agentSimulator.ts`; pending joint final sign-off)  
 **Options:** deterministic CLI/script simulator; LLM-powered agent; external agent framework.  
-**Recommendation:** deterministic script simulator. The challenge is authorization security, not model quality.
+**Decision:** Deterministic CLI simulator supporting positive payment signing plus explicit negative-test tamper flags (`--tamper-amount`, `--tamper-recipient`, `--corrupt-signature`). The MVP focus is authorization security, not model quality.
 
 ## ADR-006 — Contract architecture
 

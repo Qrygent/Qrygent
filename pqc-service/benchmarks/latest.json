@@ -1,0 +1,28 @@
+{
+  "measured": true,
+  "library": "@noble/post-quantum & viem",
+  "libraryVersion": "@noble/post-quantum@0.4.1, viem@2.58.6",
+  "runtime": "Node.js v24.12.0 (win32/x64)",
+  "cpu": "AMD Athlon Silver 3050U with Radeon Graphics   ",
+  "iterations": 100,
+  "measuredAt": "2026-11-25T03:53:40.517Z",
+  "notes": "Pure TypeScript/JS single-threaded local measurements over canonical 32-byte keccak256 digest (mean ms reported; median in docs/BENCHMARKS.md). These measurements characterize off-chain verifier overhead and do not claim universal cryptographic speed or security superiority.",
+  "metrics": [
+    {
+      "algorithm": "ML-DSA-65 (NIST FIPS 204)",
+      "keygenMs": 4.632,
+      "signMs": 18.222,
+      "verifyMs": 6.278,
+      "publicKeyBytes": 1952,
+      "signatureBytes": 3309
+    },
+    {
+      "algorithm": "ECDSA secp256k1 (EIP-712 Bridge)",
+      "keygenMs": 2.549,
+      "signMs": 2.579,
+      "verifyMs": 10.406,
+      "publicKeyBytes": 33,
+      "signatureBytes": 65
+    }
+  ]
+}

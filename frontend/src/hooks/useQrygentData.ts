@@ -1,10 +1,11 @@
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   useAccount,
   useChainId,
   useConnect,
   useDisconnect,
   useReadContract,
+  useSignMessage,
   useSwitchChain,
 } from 'wagmi';
 import { envConfig } from '../config/env';
@@ -16,7 +17,12 @@ import {
   fetchOnChainSecurityEvents,
   fetchVaultSummary,
 } from '../services/contracts/vaultInterface';
-import { pqcVerifierClient } from '../services/pqcVerifier/client';
+import {
+  pqcVerifierClient,
+  type RegisterAgentKeyInput,
+  type RevokeAgentKeyInput,
+  type RotateAgentKeyInput,
+} from '../services/pqcVerifier/client';
 
 export function useWalletNetwork() {
   const account = useAccount();
@@ -24,6 +30,7 @@ export function useWalletNetwork() {
   const { connectors, connect, isPending: isConnecting, error: connectError } = useConnect();
   const { disconnect } = useDisconnect();
   const { switchChain, isPending: isSwitching, error: switchError } = useSwitchChain();
+  const { signMessageAsync, isPending: isSigningMessage } = useSignMessage();
 
   const targetChainId = envConfig.chainId;
   const hasChainConfig = envConfig.capabilities.hasChainConfig;
@@ -73,6 +80,8 @@ export function useWalletNetwork() {
     connect,
     disconnect,
     switchChain,
+    signMessageAsync,
+    isSigningMessage,
     isConnecting,
     isSwitching,
     connectError,
@@ -102,9 +111,52 @@ export function useVerifierHealth() {
 }
 
 export function useVerifyPayment() {
+  const qc = useQueryClient();
   return useMutation({
     mutationFn: (envelope: PaymentVerificationEnvelope) =>
       pqcVerifierClient.verifyPaymentRequest(envelope),
+    onSettled: () => {
+      void qc.invalidateQueries({ queryKey: ['security', 'pqc-verifier'] });
+    },
+  });
+}
+
+export function useRegisterAgentKey() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: RegisterAgentKeyInput) => pqcVerifierClient.registerAgentKey(input),
+    onSuccess: (res) => {
+      if (res.status === 'ready') {
+        void qc.invalidateQueries({ queryKey: ['agents'] });
+        void qc.invalidateQueries({ queryKey: ['security', 'pqc-verifier'] });
+      }
+    },
+  });
+}
+
+export function useRotateAgentKey() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: RotateAgentKeyInput) => pqcVerifierClient.rotateAgentKey(input),
+    onSuccess: (res) => {
+      if (res.status === 'ready') {
+        void qc.invalidateQueries({ queryKey: ['agents'] });
+        void qc.invalidateQueries({ queryKey: ['security', 'pqc-verifier'] });
+      }
+    },
+  });
+}
+
+export function useRevokeAgentKey() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: RevokeAgentKeyInput) => pqcVerifierClient.revokeAgentKey(input),
+    onSuccess: (res) => {
+      if (res.status === 'ready') {
+        void qc.invalidateQueries({ queryKey: ['agents'] });
+        void qc.invalidateQueries({ queryKey: ['security', 'pqc-verifier'] });
+      }
+    },
   });
 }
 
@@ -158,7 +210,7 @@ export function useSecurityEvents() {
 
 export function useBenchmarks() {
   return useQuery({
-    queryKey: ['benchmarks', 'measured'],
+    queryKey: ['benchmarks', 'measured', envConfig.pqcServiceBaseUrl],
     queryFn: () => pqcVerifierClient.fetchBenchmarks(),
     retry: false,
   });

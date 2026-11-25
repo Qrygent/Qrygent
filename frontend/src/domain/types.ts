@@ -58,17 +58,25 @@ export interface Eip712Attestation {
   signature: Hex;
 }
 
+export interface VerificationMetadata {
+  algorithm: 'ML-DSA-65';
+  publicKeyFingerprint: string;
+  verifiedAt: string;
+  integrityStatus: 'intact';
+}
+
 export interface VerificationSuccessResponse {
   status: 'verified';
   requestId: string;
+  verification?: VerificationMetadata;
   attestation: Eip712Attestation;
-  verifiedAt?: string;
 }
 
 export interface VerificationRejectedResponse {
   status: 'rejected';
   code: PqcErrorCode | string;
   message: string;
+  integrityStatus?: 'tampered_or_invalid' | 'unchecked';
 }
 
 export type VerificationResponse = VerificationSuccessResponse | VerificationRejectedResponse;

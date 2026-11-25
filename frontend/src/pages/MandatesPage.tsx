@@ -2,9 +2,9 @@ import { useState, type FormEvent } from 'react';
 import { isAddress } from 'viem';
 import { Lock, Plus, Trash2 } from 'lucide-react';
 import { envConfig } from '../config/env';
-import { formatBaseUnits, formatCountdown, parseDecimalToBaseUnits } from '../domain/units';
+import { formatBaseUnits, formatCountdown, parseDecimalToBaseUnits, truncateHex } from '../domain/units';
 import type { MandateRecord } from '../domain/types';
-import { useMandates } from '../hooks/useQrygentData';
+import { useAgents, useMandates } from '../hooks/useQrygentData';
 import { VAULT_CONTRACT_INTEGRATION } from '../services/contracts/vaultInterface';
 import {
   ErrorAlert,
@@ -68,6 +68,11 @@ export interface MandateDraftValidation {
 
 export function MandatesPage() {
   const mandatesQuery = useMandates();
+  const agentsQuery = useAgents();
+  const registeredAgents =
+    agentsQuery.data?.status === 'ready'
+      ? agentsQuery.data.data.filter((a) => a.keyStatus === 'active')
+      : [];
 
   const [agentId, setAgentId] = useState('');
   const [recipientInput, setRecipientInput] = useState('');
@@ -192,13 +197,30 @@ export function MandatesPage() {
           </div>
 
           <form onSubmit={handleValidateMandate} className="space-y-4" noValidate>
-            <div>
+            <div className="space-y-1.5">
               <label
                 htmlFor="mandate-agent-id"
-                className="block font-mono text-[10px] uppercase tracking-wider text-[#5F5E56] mb-1"
+                className="block font-mono text-[10px] uppercase tracking-wider text-[#5F5E56]"
               >
                 Authorized Agent ID (bytes32)
               </label>
+              {registeredAgents.length > 0 ? (
+                <select
+                  aria-label="Select registered agent"
+                  value={registeredAgents.some((a) => a.agentId === agentId) ? agentId : ''}
+                  onChange={(e) => {
+                    if (e.target.value) setAgentId(e.target.value);
+                  }}
+                  className="w-full px-3 py-2 border border-[#141412]/25 bg-[#F7F5F0] font-mono text-xs focus:outline-none focus:border-[#2B59C3]"
+                >
+                  <option value="">Choose a live registered ML-DSA-65 agent…</option>
+                  {registeredAgents.map((a) => (
+                    <option key={a.agentId} value={a.agentId}>
+                      {a.label} ({truncateHex(a.agentId, 8, 6)})
+                    </option>
+                  ))}
+                </select>
+              ) : null}
               <input
                 id="mandate-agent-id"
                 type="text"

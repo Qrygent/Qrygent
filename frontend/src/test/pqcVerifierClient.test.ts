@@ -113,4 +113,78 @@ describe('PqcVerifierClient fail-closed behavior', () => {
       );
     }
   });
+
+  it('fetches and validates real agent registry, security events, and measured benchmarks', async () => {
+    const client = new PqcVerifierClient('http://127.0.0.1:8000');
+
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      new Response(JSON.stringify({ agents: [] }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+    const agents = await client.listAgents();
+    expect(agents.status).toBe('ready');
+
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          events: [
+            {
+              id: 'evt_1',
+              timestamp: 1800000000,
+              layer: 'PQC_VERIFIER',
+              code: 'INVALID_SIGNATURE',
+              summary: 'Rejected tampered payload',
+              severity: 'critical',
+            },
+          ],
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      ),
+    );
+    const events = await client.listSecurityEvents();
+    expect(events.status).toBe('ready');
+    if (events.status === 'ready') {
+      expect(events.data[0]?.code).toBe('INVALID_SIGNATURE');
+    }
+
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      new Response(JSON.stringify({ status: 'unavailable' }), { status: 404 }),
+    );
+    const bench = await client.fetchBenchmarks();
+    expect(bench.status).toBe('unconfigured');
+
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          agent: {
+            agentId: `0x${'aa'.repeat(32)}`,
+            label: 'Rotated Agent',
+            owner: '0x4444444444444444444444444444444444444444',
+            algorithm: 'ML-DSA-65',
+            activeKeyId: `0x${'22'.repeat(32)}`,
+            publicKeyFingerprint: 'sha256:abcd',
+            keyStatus: 'active',
+            registeredAt: 1800000000,
+            rotationHistory: [],
+            assignedMandateIds: [],
+          },
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      ),
+    );
+    const rotated = await client.rotateAgentKey({
+      agentId: `0x${'aa'.repeat(32)}`,
+      owner: '0x4444444444444444444444444444444444444444',
+      newKeyId: `0x${'22'.repeat(32)}`,
+      newPublicKey: `0x${'11'.repeat(1952)}`,
+      timestamp: 1800000000,
+      ownerSignature: `0x${'ef'.repeat(65)}`,
+    });
+    expect(rotated.status).toBe('ready');
+    if (rotated.status === 'ready') {
+      expect(rotated.data.activeKeyId).toBe(`0x${'22'.repeat(32)}`);
+    }
+  });
 });
